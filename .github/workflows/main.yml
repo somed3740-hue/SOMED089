@@ -14,6 +14,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Trouver le dossier du projet (celui qui contient package.json)
+        run: |
+          PKG=$(find . -maxdepth 3 -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | awk '{print length, $0}' | sort -n | head -n1 | cut -d' ' -f2-)
+          if [ -z "$PKG" ]; then
+            echo "Aucun package.json trouvÃ© dans le repo"; ls -R | head -50; exit 1
+          fi
+          APP_DIR=$(dirname "$PKG")
+          echo "Dossier du projet : $APP_DIR"
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -32,39 +42,45 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Installer les dÃ©pendances
+        working-directory: ${{ env.APP_DIR }}
         run: bun install
 
       - name: Installer Capacitor
+        working-directory: ${{ env.APP_DIR }}
         run: bun add @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Build web (Vite)
+        working-directory: ${{ env.APP_DIR }}
         env:
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: bun run build
 
       - name: Configurer Capacitor
+        working-directory: ${{ env.APP_DIR }}
         run: |
-          cat > capacitor.config.json <<'EOF'
+          cat > capacitor.config.json <<'JSON'
           {
             "appId": "com.somed.app",
             "appName": "SOMED",
             "webDir": "dist"
           }
-          EOF
+          JSON
 
       - name: Ajouter la plateforme Android
+        working-directory: ${{ env.APP_DIR }}
         run: |
           npx cap add android
           npx cap sync android
 
-      - name: Permissions (localisation, internet)
+      - name: Permissions (localisation)
+        working-directory: ${{ env.APP_DIR }}
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
           sed -i 's#</manifest>#    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n</manifest>#' $MANIFEST
 
       - name: Build APK debug
-        working-directory: android
+        working-directory: ${{ env.APP_DIR }}/android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
@@ -73,4 +89,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: somed-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.APP_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
