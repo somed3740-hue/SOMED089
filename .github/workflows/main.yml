@@ -14,6 +14,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extraire le zip du projet (si le repo contient maxithuf.zip)
+        run: |
+          if [ -f maxithuf.zip ]; then
+            mkdir -p app
+            unzip -q -o maxithuf.zip -d app
+          fi
+
       - name: Trouver le dossier du projet (celui qui contient package.json)
         run: |
           PKG=$(find . -maxdepth 3 -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | awk '{print length, $0}' | sort -n | head -n1 | cut -d' ' -f2-)
